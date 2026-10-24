@@ -16,8 +16,10 @@ oder Zeitgrenze weiterlaufen. Keine Behauptung sofortiger Modell-Abbruchweiterle
 
 Prompt: keine Anforderung von Passwörtern, Einmalcodes, PIN, Tokens oder Zugangsschlüsseln;
 keine erfundenen Konten, Kontaktadressen oder behaupteten ausgeführten Massnahmen.
-Lokale Ausgaben mit sensiblen Begriffen werden vorsorglich verworfen. Ausnahme ist der
-exakte harmlose Satz «Geben Sie Ihr Passwort niemals weiter.» Ein abgelehnter oder
+Lokale Ausgaben mit sensiblen Begriffen werden vorsorglich verworfen. Ausnahmen sind eng definierte vollständige Warn- und Wiederherstellungssätze,
+unter anderem «Geben Sie Ihr Passwort niemals weiter.» und die diagnostizierte
+Warnung, dass der Support keine Zugangsdaten erhalten darf. Weitere Aufforderungen
+im selben Satz oder Folgesatz werden weiterhin geprüft. Ein abgelehnter oder
 abgeschnittener Entwurf liefert vor Streambeginn 503; kein Teiltext gelangt ins UI.
 Der Filter ist konservativ und keine semantische Sicherheitsgarantie für beliebige
 Umschreibungen. Menschliche Prüfung vor Versand bleibt erforderlich.

@@ -45,7 +45,24 @@ def pruefe_entwurf(text):
     if not isinstance(text, str) or not text.strip():
         raise ModellFehler("Lokaler Antwortentwurf ist leer oder unlesbar.")
     normal = unicodedata.normalize("NFKC", text).casefold()
-    normal = normal.replace("geben sie ihr passwort niemals weiter.", "")
+    # Nur vollständige, klar harmlose Sätze ausnehmen. Eine Warnung darf eine
+    # nachfolgende Aufforderung (auch im selben Satz) nicht verdecken.
+    harmlose_saetze = (
+        r"geben sie ihr passwort niemals weiter",
+        r"(?:bitte )?(?:senden|teilen) sie (?:uns )?niemals "
+        r"(?:passwörter|passwoerter|einmalcodes|zugangsdaten)"
+        r"(?: oder (?:passwörter|passwoerter|einmalcodes|zugangsdaten))?",
+        r"(?:da )?wir (?:dürfen keine|keine) zugangsdaten wie passwörter oder einmalcodes "
+        r"erhalten(?: dürfen)?(?:, kann ich ihre spezifische situation nicht direkt lösen)?",
+        r"es tut uns leid, dass sie sich seit dem update nicht mehr anmelden können "
+        r"und das zurücksetzen des passworts nicht funktioniert hat",
+        r"(?:bitte )?(?:nutzen|verwenden) sie (?:den offiziellen weg|die offizielle funktion) "
+        r"zum zurücksetzen (?:ihres passworts|des passworts)",
+        r"(?:bitte )?setzen sie ihr passwort über (?:die offizielle website|die offizielle app) zurück",
+    )
+    saetze = re.split(r"[.!?\n]+", normal)
+    normal = "\n".join(satz for satz in saetze if not any(
+        re.fullmatch(muster, satz.strip()) for muster in harmlose_saetze))
     if re.search(r"passw[oö]r|password|kennwort|einmalcode|einmal-code|"
                  r"zugangsdaten|zugangsschlüssel|zugangsschluessel|"
                  r"api[- ]?key|token|\bpin\b|\botp\b|sicherheitscode|"

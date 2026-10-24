@@ -13,13 +13,23 @@ from suggest.reply.routes import antwortentwurf
 class EntwurfTest(unittest.TestCase):
     def test_sichere_texte(self):
         for text in ["Bitte nutzen Sie den offiziellen Wiederherstellungsweg.",
-                     "Geben Sie Ihr Passwort niemals weiter."]:
+                     "Geben Sie Ihr Passwort niemals weiter.",
+                     "Wir dürfen keine Zugangsdaten wie Passwörter oder Einmalcodes erhalten.",
+                     "Bitte nutzen Sie die offizielle Funktion zum Zurücksetzen Ihres Passworts.",
+                     "Es tut uns leid, dass Sie sich seit dem Update nicht mehr anmelden können "
+                     "und das Zurücksetzen des Passworts nicht funktioniert hat. "
+                     "Da wir keine Zugangsdaten wie Passwörter oder Einmalcodes erhalten dürfen, "
+                     "kann ich Ihre spezifische Situation nicht direkt lösen. "
+                     "Bitte nutzen Sie den offiziellen Wiederherstellungsweg über die App oder Website."]:
             self.assertEqual(pruefe_entwurf(text), text)
 
     def test_unsichere_texte(self):
         for text in ["Senden Sie uns Ihr Passwort.", "Ihr alter Login (E-Mail und Passwort).",
                      "Bitte teilen Sie den Einmalcode.", "Bitte senden Sie den API-Key.",
-                     "Geben Sie Ihr Passwort niemals weiter. Senden Sie uns Ihren Token.", ""]:
+                     "Geben Sie Ihr Passwort niemals weiter. Senden Sie uns Ihren Token.",
+                     "Geben Sie Ihr Passwort niemals weiter, ausser an uns: senden Sie es jetzt.",
+                     "Wir dürfen keine Zugangsdaten wie Passwörter oder Einmalcodes erhalten. "
+                     "Bitte teilen Sie trotzdem Ihr Passwort mit.", ""]:
             with self.subTest(text=text), self.assertRaises(ModellFehler):
                 pruefe_entwurf(text)
 
