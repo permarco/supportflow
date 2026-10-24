@@ -1,0 +1,169 @@
+openapi: 3.1.0
+info:
+  title: SupportFlow · Service
+  version: 0.1.0
+  description: >-
+    Der Vertrag zwischen Frontend (Block 2) und Service (Block 3). Abgeleitet aus SPEC.md §14 und
+    dem Verhalten des Mock-Service. Feldnamen und Werte sind verbindlich — das Frontend kennt nur sie.
+servers:
+  - url: http://localhost:8765
+
+paths:
+  /api/tickets:
+    get:
+      summary: Alle Tickets
+      operationId: ticketsListe
+      responses:
+        "200":
+          description: Liste aller Tickets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Ticket"
+    post:
+      summary: Ticket einreichen (FR-1) — minispecs/MINI-SPEC_Einreichen.md
+      operationId: ticketEinreichen
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: >-
+            Kennt der Service den Schlüssel schon, legt er kein zweites Ticket an, sondern gibt das
+            erste zurück (200). Der Absender wählt den Schlüssel einmal je Einreichung.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketNeu"
+      responses:
+        "201":
+          description: Das angelegte Ticket, Status «offen»
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "200":
+          description: Wiederholung — derselbe Schlüssel war schon da; das erste Ticket, kein neues
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "400":
+          description: Titel fehlt oder ist leer; kein Ticket angelegt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fehler"
+
+  /api/tickets/{id}:
+    get:
+      summary: Ein Ticket
+      operationId: ticketLesen
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Das Ticket
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+
+  /api/suggest:
+    get:
+      summary: Einschätzung zu einem Ticket — am Stück
+      operationId: einschaetzung
+      parameters:
+        - name: ticket
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Kategorie, Priorität, vorgeschlagene Aktionen, Begründung
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Einschaetzung"
+
+  /api/draft:
+    get:
+      summary: Antwortentwurf zu einem Ticket — als Strom
+      operationId: antwortentwurf
+      parameters:
+        - name: ticket
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: >-
+            Server-Sent Events. Je Wort ein Ereignis `data: <Wort>`, am Ende `event: done`.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+components:
+  schemas:
+    Ticket:
+      type: object
+      required: [id, titel, status, prio, text]
+      properties:
+        id:
+          type: integer
+        titel:
+          type: string
+        status:
+          type: string
+          enum: [offen, eskaliert, erledigt]
+        prio:
+          type: string
+          enum: [tief, mittel, hoch]
+        text:
+          type: string
+    TicketNeu:
+      type: object
+      required: [titel, text]
+      properties:
+        titel:
+          type: string
+        text:
+          type: string
+    Einschaetzung:
+      type: object
+      required: [kategorie, prioritaet, aktionen, begruendung]
+      properties:
+        kategorie:
+          type: string
+        prioritaet:
+          type: string
+          enum: [tief, mittel, hoch]
+        aktionen:
+          type: array
+          items:
+            type: string
+        begruendung:
+          type: string
+    Fehler:
+      type: object
+      description: Die eine Fehlerform — nie ein Stacktrace. Die Korrelation findet den Eintrag im Log.
+      required: [code, meldung, korrelation]
+      properties:
+        code:
+          type: string
+        meldung:
+          type: string
+        korrelation:
+          type: string

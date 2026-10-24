@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "supportflow": {
+      "command": "python3",
+      "args": ["-m", "mcp_geruest"]
+    }
+  }
+}

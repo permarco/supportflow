@@ -1,0 +1,12 @@
+{
+  "name": "supportflow-service",
+  "private": true,
+  "version": "0.1.0",
+  "description": "SupportFlow · Startprojekt Block 3 — Frontend aus Block 2 (bleibt), zwei Dienste hinter einem Gateway; A1 Einschätzung, A2 Vertrag und Warteschlange, A3 KI im Service",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.0"
+  }
+}

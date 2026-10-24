@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [
+      "Bash(npx playwright *)",
+      "Bash(npm test*)",
+      "Bash(node *)",
+      "Bash(python3 *)",
+      "Bash(curl *)",
+      "Bash(mkdir *)",
+      "Bash(touch *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(cd *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(sed -n *)",
+      "Bash(echo *)",
+      "Bash(pwd)",
+      "Bash(tree *)"
+    ]
+  }
+}

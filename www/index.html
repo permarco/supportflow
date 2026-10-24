@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SupportFlow · Statusübersicht</title>
+<link rel="stylesheet" href="/variablen.css">
+<style>
+  body { margin: 0; font: var(--schrift); background: var(--bg); color: var(--fg); }
+  header { padding: var(--abstand-2) var(--abstand-3); border-bottom: 1px solid var(--linie); font-weight: 700; }
+  main { padding: var(--abstand-3); }
+  h2 { font-size: 1rem; color: var(--fg-schwach); margin: 1.6rem 0 .4rem; }
+  .kacheln { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .kachel { flex: 1 1 8rem; padding: .8rem 1rem; border: 1px solid var(--rahmen); border-radius: var(--radius); }
+  .kachel .zahl { display: block; font-size: 2.4rem; font-weight: 700; line-height: 1.2; }
+  .meldung { padding: .8rem 1rem; border: 1px solid var(--fehler); border-radius: var(--radius); color: var(--fehler); }
+  .meldung button { margin-left: .8rem; font: inherit; padding: .2rem .7rem; }
+  .leer { color: var(--fg-schwach); }
+</style>
+</head>
+<body>
+<header>SupportFlow · Statusübersicht</header>
+<main>
+  <section id="stand" class="kacheln" aria-label="Stand"></section>
+  <h2>Eskalierte Tickets</h2>
+  <section id="eskaliert" aria-label="Eskalierte Tickets"></section>
+</main>
+<script type="module" src="/uebersicht.js"></script>
+</body>
+</html>

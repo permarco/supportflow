@@ -1,0 +1,24 @@
+/* SupportFlow · Design-Variablen — die einzige Stelle für Farben, Abstände und Schrift.
+   Im Code nur var(--…) verwenden (KONTEXT.md, Abschnitt Design-Variablen). */
+:root {
+  --bg: #0D1117;
+  --bg-2: #161B22;
+  --fg: #E6EDF3;
+  --fg-schwach: #6B7787;
+  --linie: #2A313C;
+  --rahmen: #6B7787;
+  --offen: #F0A73E;
+  --eskaliert: #F76B6B;
+  --erledigt: #3FB950;
+  --fehler: #F76B6B;
+  --fokus: #2DD4BF;
+  --schrift: 16px/1.5 system-ui, sans-serif;
+  --mono: 14px/1.5 ui-monospace, Menlo, monospace;
+  --abstand-1: .5rem;
+  --abstand-2: .9rem;
+  --abstand-3: 1.4rem;
+  --radius: .5rem;
+}
+
+/* Fokus sichtbar — für jedes Element, das man mit Tab erreicht. */
+:focus-visible { outline: 2px solid var(--fokus); outline-offset: 2px; }
