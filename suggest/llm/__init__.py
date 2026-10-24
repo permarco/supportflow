@@ -5,7 +5,7 @@
     for wort in drafter().entwerfe(ticket): ...
 
 Welcher Adapter antwortet, steht in .env: LLM=fake (Tests, Standard) | lokal | cloud.
-Die Adapter «lokal» und «cloud» gibt es noch nicht.
+Der Adapter «lokal» spricht mit Ollama; «cloud» ist noch nicht implementiert.
 """
 import os
 
@@ -21,6 +21,9 @@ def _adapter():
         if wahl == "fake":
             from suggest.llm.fake import FakeLLM
             _ADAPTER = FakeLLM()
+        elif wahl == "lokal":
+            from suggest.llm.lokal import LokalLLM
+            _ADAPTER = LokalLLM()
         else:
             raise ModellFehler(f"LLM={wahl}: diesen Adapter gibt es noch nicht")
     return _ADAPTER
