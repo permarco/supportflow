@@ -12,9 +12,10 @@ const ERLAUBT = {                                  // ① nur bekannte Aktionen 
   eskalieren: { text: 'Eskalieren …',       stufe: 'bestaetigung' },
   schliessen: { text: 'Ticket schliessen …', stufe: 'bestaetigung' },
 }
-const TIMEOUT_MS = 5000                            // antwortet der Service nicht, Zustand «fehler» — nie ewig «wartet»
+const TIMEOUT_MS = 110000                            // Gesamtfrist je unabhängiger Anfrage, auch für lokale Modelle.
 
 let ticket = null
+let einschAbbruch = null
 let abbruch = null                                 // AbortController des laufenden Stroms
 let ui = null
 
@@ -37,6 +38,7 @@ function baue(platz) {
     erzeugen: el('button', { type: 'button', className: 'primaer', textContent: 'Antwortentwurf erzeugen' }),
     stopp:    el('button', { type: 'button', className: 'stopp', textContent: '■ Stopp', disabled: true }),
     zustand:  el('span', { id: 'zustand', textContent: 'bereit' }),
+    einschZustand: el('span', { id: 'einschaetzung-zustand', textContent: 'Einschätzung: bereit', role: 'status' }),
     vorschlag: el('div', { id: 'vorschlag' }),
     begruendung: el('p', { id: 'begruendung' }),
     entwurf:  el('textarea', { id: 'entwurf', placeholder: 'Antwortentwurf erscheint hier — Wort für Wort.', readOnly: true }),
@@ -48,7 +50,7 @@ function baue(platz) {
   }
   ui.zustand.dataset.zustand = 'bereit'
   ui.erzeugen.addEventListener('click', erzeugen)
-  ui.stopp.addEventListener('click', stoppen)
+  ui.stopp.addEventListener('click', () => stoppen())
   ui.senden.addEventListener('click', senden)
   ui.antwort.addEventListener('input', () => { ui.senden.disabled = ui.antwort.value.trim() === '' })
   const kopf = el('div', { className: 'kopf' }, ui.erzeugen, ui.stopp, ui.zustand)
@@ -56,7 +58,7 @@ function baue(platz) {
   const antwortKopf = el('div', { className: 'kopf' }, el('span', { textContent: 'Ihre Antwort' }), ui.senden)
   const box = el('section', { id: 'assistent' },
     el('h3', { textContent: 'Assistent', style: 'margin:0;font-size:1rem' }),
-    kopf, ui.vorschlag, ui.begruendung, entwurfKopf, ui.entwurf, ui.aktionen, antwortKopf, ui.antwort, ui.meldung)
+    kopf, ui.einschZustand, ui.vorschlag, ui.begruendung, entwurfKopf, ui.entwurf, ui.aktionen, antwortKopf, ui.antwort, ui.meldung)
   box.setAttribute('aria-label', 'Assistent')
   platz.replaceChildren(box)
 }
@@ -64,7 +66,7 @@ function baue(platz) {
 function setzeZustand(z) {                         // ② jeder Zustand sichtbar
   ui.zustand.textContent = z
   ui.zustand.dataset.zustand = z
-  const laeuft = z === 'wartet' || z === 'strömt'
+  const laeuft = z === 'wartet' || z === 'strömt' || einschAbbruch !== null
   ui.erzeugen.disabled = laeuft
   ui.stopp.disabled = !laeuft
   const unvollstaendig = z === 'abgebrochen' || z === 'fehler'
@@ -86,18 +88,34 @@ async function erzeugen() {
   ui.entwurf.value = ''; hinweis('')
   setzeZustand('wartet')
   abbruch = new AbortController()
+  einschAbbruch = new AbortController()
   const signal = abbruch.signal
-  einschaetzung(signal)                            // parallel: JSON am Stück
+  einschaetzung(einschAbbruch)                            // parallel: JSON am Stück
   await entwurf(signal)                            // der Strom
 }
 
-async function einschaetzung(signal) {
+async function einschaetzung(controller) {
+  const signal = controller.signal
+  const timer = setTimeout(() => controller.abort('timeout'), TIMEOUT_MS)
+  ui.einschZustand.textContent = 'Einschätzung: lädt …'
   try {
     const r = await fetch(`/api/suggest?${apiParams()}`, { signal })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
-    zeigeEinschaetzung(await r.json())
+    const daten = await r.json()
+    if (signal.aborted) return
+    zeigeEinschaetzung(daten)
+    ui.einschZustand.textContent = 'Einschätzung: fertig'
   } catch (e) {
-    if (e.name !== 'AbortError') hinweis('Einschätzung nicht verfügbar.', true)
+    if (signal.aborted && signal.reason !== 'timeout') return
+    ui.einschZustand.textContent = signal.reason === 'timeout'
+      ? 'Einschätzung: Zeitgrenze überschritten.'
+      : 'Einschätzung nicht verfügbar. Bitte erneut versuchen.'
+  } finally {
+    clearTimeout(timer)
+    if (einschAbbruch === controller) {
+      einschAbbruch = null
+      setzeZustand(ui.zustand.textContent)
+    }
   }
 }
 
@@ -137,16 +155,20 @@ function aktionKnopf(a) {
 }
 
 async function entwurf(signal) {
-  const timer = setTimeout(() => abbruch?.abort('timeout'), TIMEOUT_MS)
+  const controller = abbruch
+  const timer = setTimeout(() => controller.abort('timeout'), TIMEOUT_MS)
   try {
     const r = await fetch(`/api/draft?${apiParams()}`, { signal })
-    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    if (!r.ok) {
+      const fehler = await r.json().catch(() => ({}))
+      throw new Error(fehler.meldung || 'Service nicht erreichbar.')
+    }
     const leser = r.body.getReader()
     const dec = new TextDecoder()
     let puffer = ''
     while (true) {
       const { value, done } = await leser.read()
-      clearTimeout(timer)
+      if (signal.aborted) return
       if (done) break
       puffer += dec.decode(value, { stream: true })
       let i
@@ -163,17 +185,24 @@ async function entwurf(signal) {
     setzeZustand(ui.entwurf.value ? 'fertig' : 'fehler')
   } catch (e) {
     clearTimeout(timer)
-    if (e.name === 'AbortError' && signal.reason !== 'timeout') { setzeZustand('abgebrochen'); return }
+    if (signal.aborted && signal.reason !== 'timeout') return
     setzeZustand('fehler')
-    hinweis(signal.reason === 'timeout' ? 'Service antwortet nicht. Das Ticket bleibt bearbeitbar.' : 'Service nicht erreichbar. Das Ticket bleibt bearbeitbar.', true)
+    hinweis(signal.reason === 'timeout' ? 'Service antwortet nicht. Das Ticket bleibt bearbeitbar.' : `Service nicht erreichbar oder Entwurf abgewiesen: ${e.message}. Das Ticket bleibt bearbeitbar.`, true)
+  } finally {
+    clearTimeout(timer)
   }
 }
 
-function stoppen(still = false) {                  // ④ Stopp schliesst die Verbindung — der Mock meldet «Abbruch bemerkt»
-  if (!abbruch) return
-  abbruch.abort()
+function stoppen(still = false) {                  // Stoppt beide Anfragen unabhängig.
+  const lief = abbruch || einschAbbruch
+  abbruch?.abort()
+  einschAbbruch?.abort()
   abbruch = null
-  if (!still) setzeZustand('abgebrochen')
+  einschAbbruch = null
+  if (!still && lief) {
+    ui.einschZustand.textContent = 'Einschätzung: abgebrochen'
+    setzeZustand('abgebrochen')
+  }
 }
 
 function senden() {                                // ⑤ nur per Klick, mit Rückfrage — nie automatisch

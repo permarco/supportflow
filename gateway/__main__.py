@@ -78,7 +78,8 @@ class Handler(BaseHTTPRequestHandler):
         laenge = int(self.headers.get("Content-Length") or 0)
         rumpf = self.rfile.read(laenge) if laenge else None
         kopf = {k: v for k, v in self.headers.items() if k.lower() in DURCHREICHEN}
-        verbindung = http.client.HTTPConnection(*adresse, timeout=30)
+        zeitgrenze = 100 if pfad in ("/api/suggest", "/api/draft") else 30
+        verbindung = http.client.HTTPConnection(*adresse, timeout=zeitgrenze)
         try:
             verbindung.request(methode, self.path, body=rumpf, headers=kopf)
             antwort = verbindung.getresponse()

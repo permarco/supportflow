@@ -141,7 +141,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Fehler"
         "503":
-          description: Ticket-Service nicht erreichbar oder Zeitgrenze von 2 Sekunden beim Ticket-Abruf überschritten
+          description: Ticket-Service oder Modell nicht erreichbar, Modellantwort ungültig oder Zeitgrenze überschritten
           content:
             application/json:
               schema:
@@ -161,7 +161,9 @@ paths:
         Eine allgemeine Sperre manueller Entwurfsanfragen bei eskalierten Tickets ist
         in A2 noch nicht umgesetzt. Die neue automatische Verarbeitung eskaliert
         sensible neue Tickets ohne automatisch einen Entwurf zu erzeugen.
-        Schliesst der Browser die Verbindung, wird die Generierung beendet.
+        Der lokale Adapter prüft den vollständigen Entwurf vor der wortweisen Ausgabe.
+        Beim Browser-Abbruch endet die Ausgabe; ein bereits blockierender lokaler
+        Modellaufruf kann bis zu seiner Antwort oder Zeitgrenze weiterlaufen.
       parameters:
         - name: ticket
           in: query
@@ -196,7 +198,8 @@ paths:
         "503":
           description: >-
             Vor Beginn des Streams: Dienst nicht erreichbar, Zeitgrenze von 2 Sekunden
-            beim Ticket-Abruf überschritten oder Entwurf wegen Modellausfall nicht verfügbar.
+            beim Ticket-Abruf überschritten oder Entwurf wegen Modellausfall beziehungsweise
+            nicht bestandener Sicherheitsprüfung nicht verfügbar.
           content:
             application/json:
               schema:

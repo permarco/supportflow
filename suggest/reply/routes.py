@@ -23,7 +23,7 @@ def antwortentwurf(anfrage):
     try:
         ticket = hole_ticket(ticket_id)
     except DienstNichtErreichbar as exc:
-        return _fehler("dienst_nicht_erreichbar", "Antwortentwurf gerade nicht möglich.", 503,
+        return _fehler("dienst_nicht_erreichbar", "Antwortentwurf nicht verfügbar oder bei der Prüfung abgewiesen.", 503,
                        intern=str(exc))
     if ticket is None:
         return _fehler("ticket_unbekannt", "Ticket nicht gefunden.", 404,
@@ -36,7 +36,7 @@ def antwortentwurf(anfrage):
         erstes = next(woerter, None)
     except ModellFehler as exc:
         _schliesse(woerter)
-        return _fehler("modell_nicht_verfuegbar", "Antwortentwurf gerade nicht möglich.", 503,
+        return _fehler("modell_nicht_verfuegbar", "Antwortentwurf nicht verfügbar oder bei der Prüfung abgewiesen.", 503,
                        intern=str(exc))
 
     def ereignisse():

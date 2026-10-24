@@ -1,7 +1,8 @@
 """Ticket einschätzen — minispecs/MINI-SPEC_Einschaetzung.md."""
 from basis.fehler import fehler as _fehler
 from basis.http import json_antwort, route
-from suggest.llm import classifier
+from suggest.llm import classifier, ModellFehler
+from suggest.classification.regeln import wende_regeln_an
 from suggest.tickets_klient import DienstNichtErreichbar, hole_ticket
 
 
@@ -24,4 +25,9 @@ def einschaetzung(anfrage):
         return _fehler("ticket_unbekannt", "Ticket nicht gefunden.", 404,
                        intern=f"angefragt: {ticket_id}")
 
-    return json_antwort(classifier().klassifiziere(ticket, anfrage.query))
+    try:
+        ergebnis = classifier().klassifiziere(ticket, anfrage.query)
+    except ModellFehler as exc:
+        return _fehler("modell_nicht_verfuegbar", "Einschätzung gerade nicht möglich.", 503,
+                       intern=str(exc))
+    return json_antwort(wende_regeln_an(ticket, ergebnis))
