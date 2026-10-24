@@ -117,6 +117,52 @@ paths:
         "503":
           $ref: "#/components/responses/DienstNichtErreichbar"
 
+  /api/tickets/{id}/eskalieren:
+    post:
+      summary: Ticket durch einen menschlichen Aufrufer eskalieren
+      operationId: ticketEskalieren
+      description: >-
+        B2: Nur X-Aufrufer mensch ist erlaubt. agent, fehlende oder unbekannte
+        Werte werden vor dem Ticket-Abruf abgewiesen. Die Kopfzeile ist eine
+        vereinfachte Rollenangabe der Übung, keine Authentifizierung.
+        Jeder Versuch wird mit Zeitpunkt, Ticketnummer, Aufrufer und Entscheidung
+        im Audit protokolliert. Ohne schreibbares Audit erfolgt keine Statusänderung.
+        Wiederholte erlaubte Aufrufe liefern das bereits eskalierte Ticket.
+        Kein Request-Body erforderlich. Die interne A2-Verarbeitung bleibt unverändert.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: X-Aufrufer
+          in: header
+          required: true
+          schema:
+            type: string
+            enum: [mensch, agent]
+      responses:
+        "200":
+          description: Ticket ist eskaliert (auch bei Wiederholung)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "403":
+          description: Aufrufer ist nicht mensch; keine Statusänderung
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fehler"
+        "404":
+          $ref: "#/components/responses/TicketNichtGefunden"
+        "503":
+          description: Dienst oder Audit nicht verfügbar; bei Audit-Ausfall keine Statusänderung
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fehler"
+
   /api/suggest:
     get:
       summary: Einschätzung zu einem Ticket — am Stück

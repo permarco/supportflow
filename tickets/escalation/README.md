@@ -1,3 +1,4 @@
-# tickets/escalation — Eskalation (FR-4)
+# tickets/escalation · B2
 
-Leer. Wird ein Ticket als sensibel eingeschätzt, setzt es dieses Modul auf «eskaliert».
+POST /api/tickets/{id}/eskalieren prüft X-Aufrufer und protokolliert den Versuch.
+Nur mensch darf den Status auf eskaliert setzen. Vertrag: openapi.yaml.

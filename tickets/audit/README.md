@@ -1,3 +1,6 @@
-# tickets/audit — Protokoll jeder KI-Entscheidung (ADR-5)
+# tickets/audit · B2
 
-Leer. Kommt in der Werkstatt A5: jeder Werkzeug-Aufruf, auch der abgewiesene.
+protokoll.py schreibt jeden Eskalationsversuch als JSON-Zeile nach
+laufzeit/audit/eskalation.jsonl. Enthalten sind UTC-Zeitpunkt, Ticketnummer,
+Aufrufer und Entscheidung. Die Datei bleibt über Neustarts bestehen.
+Details und Ausfallverhalten: minispecs/MINI-SPEC_Eskalieren_B2.md.

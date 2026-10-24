@@ -1,4 +1,4 @@
-"""MCP-Server für SupportFlow — ein Gerüst mit einem Werkzeug, nur Standardbibliothek.
+"""MCP-Server für SupportFlow — Lesen und Eskalationsversuch, nur Standardbibliothek.
 
 Das KI-Werkzeug (Claude Code, Cursor, Copilot …) startet diesen Prozess selbst und spricht mit ihm
 über stdin/stdout: je Zeile eine JSON-RPC-Nachricht (MCP, Transport «stdio»). Eintrag für Claude Code
@@ -10,8 +10,7 @@ Er ist eine Tür zum **Ticket-Service**, nicht ein eigener Fachdienst: Jedes Wer
 Endpunkt des Ticket-Service über den Gateway. Was erlaubt ist, prüft der Ticket-Service —
 nicht dieses Gerüst und nicht die Beschreibung des Werkzeugs (Schild, kein Schloss).
 
-Gebaut ist ein Werkzeug: ticket_lesen. Die übrigen aus dem Werkzeug-Vertrag (Folie Â«Der Werkzeug-Vertrag fÃ¼r SupportFlowÂ», Werkstatt A5) fügen Sie in
-WERKZEUGE hinzu — Beschreibung, Eingabeschema, Funktion.
+Werkzeuge: ticket_lesen und ticket_eskalieren (B3).
 """
 import json
 import os
@@ -49,7 +48,29 @@ def ticket_lesen(args):
     return False, json.dumps(daten, ensure_ascii=False)
 
 
+def ticket_eskalieren(args):
+    if not isinstance(args, dict) or set(args) != {"id"} or type(args["id"]) is not int:
+        return True, "Genau eine ganzzahlige id ist erforderlich."
+    nummer = args["id"]
+    anfrage = urllib.request.Request(
+        GATEWAY + f"/api/tickets/{nummer}/eskalieren", method="POST", data=b"",
+        headers={"X-Aufrufer": "agent"})
+    try:
+        with urllib.request.urlopen(anfrage, timeout=5) as antwort:
+            status, daten = antwort.status, json.loads(antwort.read() or b"null")
+    except urllib.error.HTTPError as exc:
+        with exc:
+            status, daten = exc.code, json.loads(exc.read() or b"null")
+    return status != 200, f"HTTP {status}: " + json.dumps(daten, ensure_ascii=False)
+
+
 WERKZEUGE = {
+    "ticket_eskalieren": {
+        "beschreibung": "Eskaliert ein Ticket an einen Menschen. Nur verwenden, wenn ein Mensch das verlangt hat.",
+        "schema": {"type": "object", "properties": {"id": {"type": "integer", "description": "Ticketnummer"}},
+                   "required": ["id"], "additionalProperties": False},
+        "funktion": ticket_eskalieren,
+    },
     "ticket_lesen": {
         "beschreibung": "Liest ein Support-Ticket von SupportFlow: Nummer, Titel, Status, Priorität, Text. "
                         "Nur lesen, ändert nichts.",

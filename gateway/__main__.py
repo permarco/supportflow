@@ -21,7 +21,7 @@ WEITERLEITUNG = [
     ("/api/draft", ("127.0.0.1", 8767)),
 ]
 WWW = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "www")
-DURCHREICHEN = {"content-type", "idempotency-key", "accept"}
+DURCHREICHEN = {"content-type", "idempotency-key", "accept", "x-aufrufer"}
 
 
 def log(msg):
