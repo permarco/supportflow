@@ -95,6 +95,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Einschaetzung"
+        "404":
+          description: Ticket nicht gefunden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fehler"
+        "503":
+          description: Ticket-Service nicht erreichbar oder Zeitgrenze von 2 Sekunden beim Ticket-Abruf überschritten
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fehler"
 
   /api/draft:
     get:

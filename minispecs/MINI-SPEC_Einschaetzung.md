@@ -56,3 +56,19 @@ Diese Mini-SPEC umfasst genau die drei genannten Fälle. Fehlende oder ungültig
 Kein Antwortentwurf, keine Warteschlange und keine Anbindung eines echten Modells in diesem
 Schritt. Frontend und bestehende Tests bleiben unverändert. Neue Testdateien sind nicht
 beauftragt. Die Dienste startet und stoppt der Benutzer selbst.
+
+## Abnahmeprotokoll · 24.10.2026
+
+- Vorhandenes Ticket 418: 200 mit Einschätzung aus dem Fake.
+- Unbekanntes Ticket 999999: 404 in der vereinbarten Fehlerform.
+- Ticket-Service gezielt gestoppt: 503 in der vereinbarten Fehlerform.
+  Danach wurde der Ticket-Service wieder gestartet und seine Erreichbarkeit mit 200 bestätigt.
+  Start und Stopp durch die KI waren für diese Abnahme ausdrücklich vom Benutzer beauftragt.
+- `npx playwright test --workers=1`: 19 bestanden, 5 fehlgeschlagen.
+  Die fünf verbleibenden Fehler betreffen den noch fehlenden Antwortentwurf aus A2.
+- Die beiden vorherigen parallelen Läufe hatten zusätzlich wechselnde Seitenlade-Timeouts
+  (16 beziehungsweise 17 bestanden). Deren Ursache ist noch nicht geklärt; beim sequenziellen
+  Lauf traten diese zusätzlichen Fehler nicht auf. Tests und Konfiguration wurden nicht verändert.
+
+Vertragsnotiz: Die KI hat `openapi.yaml` beim Endpunkt `/api/suggest` um die Antworten
+404 und 503 ergänzt. Diese Änderung war ausdrücklich beauftragt.
