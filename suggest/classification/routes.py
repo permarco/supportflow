@@ -1,16 +1,8 @@
 """Ticket einschätzen — minispecs/MINI-SPEC_Einschaetzung.md."""
-import uuid
-
-from basis.http import json_antwort, log, route
+from basis.fehler import fehler as _fehler
+from basis.http import json_antwort, route
 from suggest.llm import classifier
 from suggest.tickets_klient import DienstNichtErreichbar, hole_ticket
-
-
-def _fehler(code, meldung, status, intern):
-    """Fehlerform des Vertrags; interne Details bleiben im Log."""
-    korrelation = uuid.uuid4().hex[:12]
-    log(f"[{korrelation}] {code}: {intern}")
-    return json_antwort({"code": code, "meldung": meldung, "korrelation": korrelation}, status)
 
 
 @route("GET", "/api/suggest")

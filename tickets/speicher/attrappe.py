@@ -3,8 +3,11 @@
 Nach jedem Neustart sind die neun Beispieltickets wieder da und alles andere weg.
 """
 import threading
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 
 _sperre = threading.Lock()
+_AUFTRAEGE = {}  # Intern: Ticketnummer -> Timestamp und Verarbeitungsstand.
 
 _TICKETS = [
     {"id": 412, "titel": "Rechnung doppelt erhalten", "status": "offen", "prio": "hoch",
@@ -39,11 +42,11 @@ _TICKETS = [
 class Attrappe:
     def alle(self):
         with _sperre:
-            return [dict(t) for t in _TICKETS]
+            return deepcopy(_TICKETS)
 
     def finde(self, id):
         with _sperre:
-            return next((dict(t) for t in _TICKETS if t["id"] == int(id)), None)
+            return next((deepcopy(t) for t in _TICKETS if t["id"] == int(id)), None)
 
     def anlegen(self, daten):
         with _sperre:
@@ -67,3 +70,37 @@ class Attrappe:
                     t["einschaetzung"] = dict(einschaetzung)
                     return dict(t)
         return None
+
+    def beauftrage_einschaetzung(self, id):
+        """Neuer interner Auftrag; auch bei zurückgestellter Uhr strikt später."""
+        with _sperre:
+            ticket = next((t for t in _TICKETS if t["id"] == int(id)), None)
+            if ticket is None:
+                return None
+            jetzt = datetime.now(timezone.utc)
+            vorher = _AUFTRAEGE.get(ticket["id"])
+            if vorher:
+                letzter = datetime.fromisoformat(vorher["angefordert_am"].replace("Z", "+00:00"))
+                jetzt = max(jetzt, letzter + timedelta(microseconds=1))
+            timestamp = jetzt.isoformat(timespec="microseconds").replace("+00:00", "Z")
+            _AUFTRAEGE[ticket["id"]] = {"angefordert_am": timestamp, "verarbeitet": False}
+            return {"id": ticket["id"], "titel": ticket["titel"], "text": ticket["text"],
+                    "angefordert_am": timestamp}
+
+    def uebernehme_einschaetzung(self, id, angefordert_am, einschaetzung):
+        """Prüfung, Übernahme und Eskalation atomar; erstes aktuelles Ergebnis gilt."""
+        with _sperre:
+            auftrag = _AUFTRAEGE.get(int(id))
+            if (auftrag is None or auftrag["angefordert_am"] != angefordert_am
+                    or auftrag["verarbeitet"]):
+                return False
+            ticket = next((t for t in _TICKETS if t["id"] == int(id)), None)
+            if ticket is None:
+                return False
+            ergebnis = deepcopy(einschaetzung)
+            eskalieren = "eskalieren" in ergebnis["aktionen"]
+            ticket["einschaetzung"] = ergebnis
+            if eskalieren:
+                ticket["status"] = "eskaliert"
+            auftrag["verarbeitet"] = True
+            return True

@@ -3,17 +3,11 @@
 GET /api/tickets, GET /api/tickets/{id} und POST /api/tickets (Mini-SPEC «Ticket einreichen»).
 """
 import threading
-import uuid
 
+from basis.fehler import fehler
 from basis.http import route, json_antwort, log
+from basis.warteschlange import sende
 from tickets.speicher import speicher
-
-
-def fehler(code, meldung, status, intern):
-    """Die Fehlerform aus openapi.yaml. Das Innere geht ins Log, nicht in die Antwort."""
-    korrelation = uuid.uuid4().hex[:12]
-    log(f"[{korrelation}] {code}: {intern}")
-    return json_antwort({"code": code, "meldung": meldung, "korrelation": korrelation}, status)
 
 
 @route("GET", "/api/tickets")
@@ -32,6 +26,7 @@ def ticket_lesen(anfrage):
 
 
 _bekannt = {}                      # Idempotency-Key -> Ticketnummer (Block 4: in der Datenbank)
+_ausstehend = {}                   # Noch nicht erfolgreich abgelegte Aufträge, nur im Speicher.
 _sperre = threading.Lock()
 
 
@@ -54,9 +49,21 @@ def ticket_einreichen(anfrage):
     with _sperre:
         if schluessel and schluessel in _bekannt:
             log(f"Wiederholung erkannt ({schluessel}) → Ticket {_bekannt[schluessel]}")
-            return json_antwort(speicher.finde(_bekannt[schluessel]), 200)
-        ticket = speicher.anlegen({"titel": titel, "text": text})
-        if schluessel:
-            _bekannt[schluessel] = ticket["id"]
-    log(f"Ticket {ticket['id']} angelegt")
-    return json_antwort(ticket, 201)
+            ticket = speicher.finde(_bekannt[schluessel])
+            status = 200
+        else:
+            ticket = speicher.anlegen({"titel": titel, "text": text})
+            _ausstehend[ticket["id"]] = speicher.beauftrage_einschaetzung(ticket["id"])
+            if schluessel:
+                _bekannt[schluessel] = ticket["id"]
+            status = 201
+        if ticket["id"] in _ausstehend:
+            try:
+                sende("eingereicht", _ausstehend[ticket["id"]])
+            except OSError as exc:
+                return fehler("warteschlange_nicht_verfuegbar", "Einschätzung konnte nicht beauftragt werden.",
+                              503, intern=str(exc))
+            del _ausstehend[ticket["id"]]
+    if status == 201:
+        log(f"Ticket {ticket['id']} angelegt")
+    return json_antwort(ticket, status)

@@ -123,12 +123,72 @@ nie einen Provider. Im Test tritt ein deterministischer Fake an die Stelle des A
 *Preis:* eine zusätzliche Indirektionsebene; der kleinste gemeinsame Nenner der
 Provider-Funktionen bestimmt die Schnittstelle.
 
-**ADR-3 · Einschätzung asynchron, entkoppelt vom Einreichen** *(aus Block 1, in Block 3 auszuarbeiten)*
-*Folgt aus:* Performance (5) — NfA-1 verlangt < 300 ms, ein LLM-Aufruf dauert Sekunden.
-*Entscheid:* Das Einreichen schreibt das Ticket und quittiert sofort; die Einschätzung läuft
-danach über eine Warteschlange. **Offen:** welche Nachricht welcher Dienst an wen schickt.
-*Preis:* Tickets sind kurz ohne Einschätzung sichtbar — «offen» ist ein eigener Zustand, kein Fehler.
+**ADR-3 · Einschätzung asynchron, entkoppelt vom Einreichen** *(in Block 3 ausgearbeitet)*
+
+*Folgt aus:* NfA-1 verlangt eine Quittung in weniger als 300 ms (p95), während ein Modellaufruf
+Sekunden dauern kann. Ein Ticket soll auch eingereicht werden können, wenn der Suggest-Service
+ausgefallen ist. Gemäss ADR-1 gehören die Tickets dem Ticket-Service; dieser übernimmt deshalb
+auch die Ergebnisse und führt die Eskalation gemäss FR-4 aus.
+
+*Entscheid:* Der Ticket-Service speichert ein neues Ticket mit Status `offen` und legt eine
+Nachricht **`eingereicht`** in die gleichnamige Warteschlange. Sie enthält `id`, `titel`, `text`
+und `angefordert_am`. Anschliessend quittiert er die Einreichung, ohne auf die Einschätzung zu warten.
+
+Der Suggest-Service liest die Nachricht und erstellt die Einschätzung über den bestehenden
+LLM-Port. Danach legt er eine Nachricht **`klassifiziert`** in die zweite Warteschlange. Sie enthält
+`id`, `angefordert_am` und `einschaetzung` mit `kategorie`, `prioritaet`, `aktionen` und
+`begruendung`. Den Timestamp übernimmt er unverändert aus der ursprünglichen Nachricht.
+
+Der Ticket-Service verarbeitet das Ergebnis und speichert die Einschätzung am Ticket. Enthalten
+die vorgeschlagenen Aktionen `eskalieren`, setzt er den Status auf `eskaliert`. Ein älteres oder
+doppelt zugestelltes Ergebnis darf diese Entscheidung nicht verändern.
+
+**Zuordnung und Schutz vor veralteten Ergebnissen:** Der Ticket-Service vergibt für jeden neuen
+Einschätzungsauftrag einen UTC-Timestamp `angefordert_am` und speichert ihn als aktuell
+angeforderten Stand am Ticket.
+
+- Neue Aufträge für dasselbe Ticket erhalten einen eindeutig unterscheidbaren, strikt späteren
+  Timestamp — auch bei gleicher Uhrzeitauflösung oder einer zurückgestellten Systemuhr.
+- Eine Wiederholung desselben Auftrags behält seinen ursprünglichen Timestamp.
+- Ein Ergebnis wird nur übernommen, wenn sein Timestamp genau dem aktuell angeforderten
+  Timestamp entspricht und für diesen Auftrag noch kein Ergebnis übernommen wurde.
+- Ergebnisse älterer Aufträge sowie doppelte Zustellungen werden ignoriert. Ein unbekannter,
+  vermeintlich neuerer Timestamp wird ebenfalls nicht akzeptiert.
+- Liefern zwei Ausführungen desselben Auftrags unterschiedliche Ergebnisse, wird nur das zuerst
+  übernommene Ergebnis verwendet.
+
+Der Timestamp bezeichnet den Auftrag, nicht den Zeitpunkt, zu dem das Modell fertig wurde.
+Die Uhren des Suggest-Service werden für die Zuordnung nicht benötigt. Ein eigener Auslöser
+für bewusste Neueinschätzungen wird in diesem Schritt noch nicht gebaut.
+
+Wir verwenden die vorhandenen dateibasierten Warteschlangen mit Zustellung mindestens einmal.
+Bei einem Ausfall des Suggest-Service bleiben Nachrichten liegen und werden nach dessen
+Neustart verarbeitet. Die Einschätzung auf Knopfdruck aus A1 bleibt synchron.
+
+*Preis:* Tickets sind vorübergehend als `offen` ohne Einschätzung sichtbar. Bei längeren
+Ausfällen entsteht ein Rückstau, wodurch sich die Einschätzung weiter verzögert.
 Fehlgeschlagene Einschätzungen brauchen einen Wiederholmechanismus.
+
+Der Ticket-Service muss den aktuellen Auftrag und dessen Verarbeitungsstand speichern.
+Die sichere Vergabe eindeutiger, aufsteigender Timestamps benötigt zusätzliche Logik;
+eine reine Abfrage der Systemzeit genügt nicht. Ein neuer Auftrag macht ältere Ergebnisse
+ungültig, auch wenn das neue Ergebnis noch aussteht. Unterschiedliche Ergebnisse desselben
+Auftrags werden nicht fachlich verglichen.
+
+Ticket-Speicherung und Nachrichtenablage sind im aktuellen Gerüst keine gemeinsame atomare
+Transaktion. Ein Absturz dazwischen bleibt ein gesondert zu behandelndes Risiko.
+
+*Prüfung:*
+
+- Suggest-Service stoppen und ein Ticket einreichen: Die Quittung erfolgt weiterhin, die
+  Nachricht wartet. Die Quittungszeit wird gegen NfA-1 gemessen (< 300 ms, p95).
+- Suggest-Service wieder starten: Die Einschätzung wird nachgetragen; sensible Tickets werden
+  eskaliert.
+- Dasselbe Ergebnis zweimal zustellen: keine zusätzliche fachliche Wirkung.
+- Zwei Aufträge erzeugen und ihre Ergebnisse in umgekehrter Reihenfolge zustellen: Nur das
+  Ergebnis des aktuell angeforderten Auftrags wird übernommen.
+- Gleiche beziehungsweise zurückgestellte Uhrzeit simulieren: Neue Aufträge bleiben anhand
+  ihrer Timestamps eindeutig und geordnet.
 
 **ADR-4 · PII-Maskierung als eigener Baustein vor dem LLM-Adapter**
 *Folgt aus:* Datenschutz (1) — dem höchstpriorisierten Qualitätsziel.
@@ -307,6 +367,10 @@ flowchart LR
     G -->|"/api/tickets"| T["Ticket-Service :8766<br/>intake · escalation · audit"]
     G -->|"/api/suggest · /api/draft"| S["Suggest-Service :8767<br/>classification · reply"]
     S -->|"REST, Zeitgrenze 2 s"| T
+    T -.->|"ablegen: id, titel, text, angefordert_am"| E[("Warteschlange eingereicht<br/>dateibasiert")]
+    E -.->|"verarbeiten"| S
+    S -.->|"ablegen: id, angefordert_am, einschaetzung"| K[("Warteschlange klassifiziert<br/>dateibasiert")]
+    K -.->|"Auftrag prüfen, Ergebnis übernehmen<br/>gegebenenfalls eskalieren"| T
     T --- D[("Speicher-Attrappe<br/>Block 4: Datenbank")]
     S --- L["LLM hinter dem Port<br/>Fake · lokal · Cloud"]
 ```
@@ -316,7 +380,12 @@ flowchart LR
 | Browser → Gateway → Dienst | synchron, REST | der Mensch wartet auf die Antwort |
 | Browser → Gateway → Suggest-Service (`/api/draft`) | synchron, Strom (SSE) | der Mensch liest mit, während das LLM schreibt |
 | Suggest-Service → Ticket-Service | synchron, REST, Zeitgrenze | auf Knopfdruck (Einschätzen, Antwortentwurf) braucht er den Ticket-Text; die Tickets gehören dem Ticket-Service |
+| Ticket-Service → Warteschlange `eingereicht` → Suggest-Service | asynchron, Nachricht | Einreichen wartet nicht auf das Modell; die Nachricht enthält `id`, `titel`, `text`, `angefordert_am` |
+| Suggest-Service → Warteschlange `klassifiziert` → Ticket-Service | asynchron, Nachricht | Das Ergebnis gehört zum Ticket; die Nachricht enthält `id`, `angefordert_am`, `einschaetzung` |
 
-Die Einschätzung neuer Tickets läuft asynchron (ADR-3). Wer welche Nachricht an wen schickt, ist noch offen.
+Die gestrichelten Pfeile zeigen die asynchrone Einschätzung neuer Tickets gemäss ADR-3.
+Beide Warteschlangen stellen mindestens einmal zu. Der Ticket-Service übernimmt ein Ergebnis
+nur für den aktuell angeforderten Timestamp und nur einmal. Veraltete oder doppelte Ergebnisse
+verändern das Ticket nicht. Die synchronen Aufrufe auf Knopfdruck bleiben bestehen.
 
 Starten: `./service.sh` (alle drei).

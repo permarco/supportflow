@@ -20,6 +20,7 @@ import traceback
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
+from basis.fehler import fehler
 
 _ROUTEN = []          # (methode, pfad, regex, funktion)
 _NAME = "service"     # Name des Dienstes im Log
@@ -145,13 +146,13 @@ class _Handler(BaseHTTPRequestHandler):
                 anfrage = Anfrage(methode, u.path, query, treffer.groupdict(), headers, rumpf)
                 try:
                     antwort = f(anfrage)
-                except Exception as e:                       # noqa: BLE001
-                    # Entwicklungsmodus aus dem Vorprojekt: Fehler samt Ablauf zurückgeben
-                    log(f"{methode} {u.path} → 500 {e!r}")
-                    antwort = json_antwort({"error": repr(e), "trace": traceback.format_exc()}, 500)
+                except Exception:                           # noqa: BLE001
+                    antwort = fehler("interner_fehler", "Ein interner Fehler ist aufgetreten.", 500,
+                                     intern=f"{methode} {u.path}\n{traceback.format_exc()}")
                 return self._sende(antwort, anfrage)
 
-        self._sende(json_antwort({"error": f"{methode} {u.path} nicht gefunden"}, 404))
+        self._sende(fehler("pfad_unbekannt", "Diesen Endpunkt gibt es nicht.", 404,
+                          intern=f"{methode} {u.path}"))
 
     def _sende(self, antwort, anfrage=None):
         if isinstance(antwort, Strom):

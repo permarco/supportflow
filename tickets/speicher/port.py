@@ -13,3 +13,7 @@ class TicketSpeicher(Protocol):
         """Vergibt die nächste Nummer, setzt status «offen» und gibt das neue Ticket zurück."""
     def setze_status(self, id: int, status: str) -> dict | None: ...
     def setze_einschaetzung(self, id: int, einschaetzung: dict) -> dict | None: ...
+    def beauftrage_einschaetzung(self, id: int) -> dict | None:
+        """Speichert einen neuen internen Auftrag und liefert die eingereicht-Nachricht."""
+    def uebernehme_einschaetzung(self, id: int, angefordert_am: str, einschaetzung: dict) -> bool:
+        """Übernimmt nur das erste aktuelle Ergebnis, inklusive Eskalation, atomar."""

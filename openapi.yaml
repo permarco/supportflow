@@ -8,6 +8,37 @@ info:
 servers:
   - url: http://localhost:8765
 
+x-warteschlangen:
+  description: >-
+    Dateibasierte interne Nachrichten gemäss ADR-3, keine HTTP-Endpunkte.
+    Die folgenden Schemas beschreiben den fachlichen Inhalt, nicht den technischen
+    Warteschlangen-Umschlag. Zustellung mindestens einmal; Wiederholungen behalten
+    angefordert_am. Der Ticket-Service speichert den aktuell angeforderten Timestamp
+    und den Verarbeitungsstand intern, nicht in der öffentlichen Ticket-Antwort.
+    Ein Ergebnis wird nur übernommen, wenn angefordert_am exakt dem aktuellen Auftrag
+    entspricht und für diesen Auftrag noch kein Ergebnis übernommen wurde.
+    Ältere, unbekannte und doppelte Ergebnisse verändern das Ticket nicht.
+    Bei unterschiedlichen Ergebnissen desselben Auftrags gilt das zuerst übernommene.
+  eingereicht:
+    sender: Ticket-Service
+    empfaenger: Suggest-Service
+    schema:
+      $ref: "#/components/schemas/TicketEingereicht"
+    description: >-
+      Nach der Ticket-Anlage ablegen, dann die Einreichung ohne Warten auf die
+      Einschätzung quittieren. Eine Wiederholung mit bekanntem Idempotency-Key
+      erzeugt weder ein weiteres Ticket noch einen neuen Einschätzungsauftrag.
+  klassifiziert:
+    sender: Suggest-Service
+    empfaenger: Ticket-Service
+    schema:
+      $ref: "#/components/schemas/TicketKlassifiziert"
+    description: >-
+      Der Suggest-Service gibt id und angefordert_am unverändert zurück.
+      Der Ticket-Service übernimmt ein gültiges aktuelles Ergebnis als einschaetzung
+      am Ticket. Enthält aktionen den Wert eskalieren, setzt er status auf eskaliert.
+      Die automatische Verarbeitung erzeugt und sendet keinen Antwortentwurf.
+
 paths:
   /api/tickets:
     get:
@@ -22,6 +53,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Ticket"
+        "503":
+          $ref: "#/components/responses/DienstNichtErreichbar"
     post:
       summary: Ticket einreichen (FR-1) — minispecs/MINI-SPEC_Einreichen.md
       operationId: ticketEinreichen
@@ -59,6 +92,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Fehler"
+        "503":
+          $ref: "#/components/responses/DienstNichtErreichbar"
 
   /api/tickets/{id}:
     get:
@@ -77,6 +112,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Ticket"
+        "404":
+          $ref: "#/components/responses/TicketNichtGefunden"
+        "503":
+          $ref: "#/components/responses/DienstNichtErreichbar"
 
   /api/suggest:
     get:
@@ -112,6 +151,17 @@ paths:
     get:
       summary: Antwortentwurf zu einem Ticket — als Strom
       operationId: antwortentwurf
+      description: >-
+        Ein Antwortentwurf wird nur auf Anfrage erzeugt und nie automatisch gesendet.
+        Abgrenzung für A2: Die bestehenden Fake-Demotickets und Frontend-Tests behalten
+        das Verhalten aus Block 2. Sie dürfen einen Entwurf auch ohne gespeicherte
+        Einschätzung anfordern; der bestehende Test für das eskalierte Ticket 422
+        erwartet ebenfalls einen Entwurf. Dies ist eine begrenzte Abweichung von
+        FR-3/FR-4 für diese Fake-Demofälle, keine allgemeine Freigabe für eskalierte Tickets.
+        Eine allgemeine Sperre manueller Entwurfsanfragen bei eskalierten Tickets ist
+        in A2 noch nicht umgesetzt. Die neue automatische Verarbeitung eskaliert
+        sensible neue Tickets ohne automatisch einen Entwurf zu erzeugen.
+        Schliesst der Browser die Verbindung, wird die Generierung beendet.
       parameters:
         - name: ticket
           in: query
@@ -120,17 +170,58 @@ paths:
             type: integer
       responses:
         "200":
-          description: >-
-            Server-Sent Events. Je Wort ein Ereignis `data: <Wort>`, am Ende `event: done`.
+          description: |-
+            Server-Sent Events, jedes Ereignis endet mit einer Leerzeile.
+            Je Wort: `data: <Wort>`.
+            Erfolgreicher Abschluss: `event: done` mit `data: {}`.
+            Fehler nach Beginn des Streams: `event: error` mit einem lesbaren
+            Meldungstext im data-Feld, nicht mit einem JSON-Fehlerobjekt oder Stacktrace.
+            Danach endet der Stream ohne done; bereits gelieferter Text ist unvollständig.
+            Der HTTP-Status bleibt nach Beginn des Streams 200.
+            Beispiel für den bestehenden Fake-Fehler: Verbindung zum Modell verloren.
           content:
             text/event-stream:
               schema:
                 type: string
+              example: |+
+                data: Guten
+
+                data: Tag
+
+                event: done
+                data: {}
+
+        "404":
+          $ref: "#/components/responses/TicketNichtGefunden"
+        "503":
+          description: >-
+            Vor Beginn des Streams: Dienst nicht erreichbar, Zeitgrenze von 2 Sekunden
+            beim Ticket-Abruf überschritten oder Entwurf wegen Modellausfall nicht verfügbar.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fehler"
 
 components:
+  responses:
+    TicketNichtGefunden:
+      description: Ticket nicht gefunden; bei einem Stream-Endpunkt vor Beginn des Streams
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Fehler"
+    DienstNichtErreichbar:
+      description: Benötigter Dienst nicht erreichbar; Antwort in der gemeinsamen Fehlerform
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Fehler"
   schemas:
     Ticket:
       type: object
+      description: >-
+        Öffentliche Ticket-Daten. einschaetzung fehlt, solange kein Ergebnis vorliegt.
+        Auftrags-Timestamp und Verarbeitungsstand bleiben intern im Ticket-Service.
       required: [id, titel, status, prio, text]
       properties:
         id:
@@ -145,6 +236,8 @@ components:
           enum: [tief, mittel, hoch]
         text:
           type: string
+        einschaetzung:
+          $ref: "#/components/schemas/Einschaetzung"
     TicketNeu:
       type: object
       required: [titel, text]
@@ -168,6 +261,44 @@ components:
             type: string
         begruendung:
           type: string
+    AuftragsTimestamp:
+      type: string
+      format: date-time
+      pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$'
+      description: >-
+        UTC-Timestamp des Einschätzungsauftrags, mit genau sechs Nachkommastellen und Z.
+        Vom Ticket-Service vergeben, nicht aus der Fertigstellungszeit abgeleitet.
+        Neue Aufträge desselben Tickets erhalten eindeutig unterscheidbare, strikt
+        spätere Werte, auch bei gleicher Uhrzeitauflösung oder zurückgestellter Uhr.
+        Wiederholungen desselben Auftrags behalten den Wert. Der Suggest-Service
+        gibt ihn unverändert zurück. Diese dienstübergreifenden Regeln werden
+        durch die Verarbeitung geprüft; das Datumsformat allein erzwingt sie nicht.
+      examples:
+        - "2026-10-24T10:15:30.123456Z"
+    TicketEingereicht:
+      type: object
+      required: [id, titel, text, angefordert_am]
+      properties:
+        id:
+          type: integer
+          description: Ticketnummer, nicht die technische Nachrichten-ID
+        titel:
+          type: string
+        text:
+          type: string
+        angefordert_am:
+          $ref: "#/components/schemas/AuftragsTimestamp"
+    TicketKlassifiziert:
+      type: object
+      required: [id, angefordert_am, einschaetzung]
+      properties:
+        id:
+          type: integer
+          description: Ticketnummer aus der eingereicht-Nachricht
+        angefordert_am:
+          $ref: "#/components/schemas/AuftragsTimestamp"
+        einschaetzung:
+          $ref: "#/components/schemas/Einschaetzung"
     Fehler:
       type: object
       description: Die eine Fehlerform — nie ein Stacktrace. Die Korrelation findet den Eintrag im Log.

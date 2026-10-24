@@ -11,9 +11,9 @@ import http.client
 import json
 import os
 import time
-import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
+from basis.fehler import fehlerdaten
 
 WEITERLEITUNG = [
     ("/api/tickets", ("127.0.0.1", 8766)),
@@ -59,8 +59,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         self._weiter("DELETE")
 
-    def _json(self, status, obj):
-        obj = {**obj, "korrelation": uuid.uuid4().hex[:12]}
+    def _json(self, status, obj, intern=None):
+        obj = fehlerdaten(obj["code"], obj["meldung"], intern or self.path, log)
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -82,15 +82,16 @@ class Handler(BaseHTTPRequestHandler):
         try:
             verbindung.request(methode, self.path, body=rumpf, headers=kopf)
             antwort = verbindung.getresponse()
-        except OSError:
+            typ = antwort.getheader("Content-Type", "")
+            if not typ.startswith("text/event-stream"):
+                body = antwort.read()
+        except (OSError, http.client.HTTPException) as exc:
             verbindung.close()
-            log(f"{methode} {pfad} → Dienst :{adresse[1]} nicht erreichbar → 503")
             return self._json(503, {"code": "dienst_nicht_erreichbar",
-                                    "meldung": "Der Dienst ist gerade nicht erreichbar."})
-        typ = antwort.getheader("Content-Type", "")
+                                    "meldung": "Der Dienst ist gerade nicht erreichbar."},
+                              intern=f"{methode} {pfad} → :{adresse[1]}: {exc!r}")
         if typ.startswith("text/event-stream"):
             return self._strom(antwort, verbindung, pfad, adresse)
-        body = antwort.read()
         verbindung.close()
         self.send_response(antwort.status)
         self.send_header("Content-Type", typ or "application/json")
